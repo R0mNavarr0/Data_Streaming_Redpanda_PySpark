@@ -1,0 +1,42 @@
+services:
+  redpanda:
+    build: ./redpanda
+    container_name: redpanda
+    ports:
+      - "19092:19092"   # Kafka API SASL
+      - "19644:19644"   # Admin API
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: redpanda-console
+    depends_on:
+      - redpanda
+    environment:
+      KAFKA_BROKERS: redpanda:19092
+      KAFKA_TLS_ENABLED: "false"
+      KAFKA_SASL_ENABLED: "false"
+    ports:
+      - "8080:8080"
+
+  tickets-generator:
+    build: ./generator
+    container_name: tickets-generator
+    depends_on:
+      - redpanda
+    command: ["/bin/sh", "-c", "sleep 10 && python /app/tickets_generator.py"]
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:19092
+
+  spark-stream:
+    build: ./spark
+    container_name: spark-stream
+    depends_on:
+      - redpanda
+    command: ["/bin/sh", "-c", "sleep 15 && /opt/spark/bin/spark-submit /opt/app/pyspark_stream_tickets.py"]
+    environment:
+      KAFKA_BOOTSTRAP: redpanda:19092
+    tty: true
+    restart: unless-stopped
+    volumes:
+    - ./checkpoints:/opt/spark/checkpoints
+    - ./output_json:/tmp/agg_json
